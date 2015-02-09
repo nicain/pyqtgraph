@@ -1689,20 +1689,46 @@ class EllipseROI(ROI):
         
         p.drawEllipse(r)
         
-    def getArrayRegion(self, arr, img=None):
+    def getArrayRegion(self, *args, **kwds):
         """
         Return the result of ROI.getArrayRegion() masked by the elliptical shape
         of the ROI. Regions outside the ellipse are set to 0.
         """
-        arr = ROI.getArrayRegion(self, arr, img)
+        
+        axes = args[2]
+        x_dim, y_dim = axes 
+        result = ROI.getArrayRegion(self, *args, **kwds)
+        if kwds.get('returnMappedCoords', False):
+            arr, coords = result
+        else:
+            arr = result
+            
+        print 
         if arr is None or arr.shape[0] == 0 or arr.shape[1] == 0:
             return None
-        w = arr.shape[0]
-        h = arr.shape[1]
+        
+        print coords.shape
+        w, h = arr.shape[x_dim], arr.shape[y_dim] 
+        
         ## generate an ellipsoidal mask
         mask = np.fromfunction(lambda x,y: (((x+0.5)/(w/2.)-1)**2+ ((y+0.5)/(h/2.)-1)**2)**0.5 < 1, (w, h))
+
+        if x_dim == 0 and y_dim == 1: data_to_mask = arr.swapaxes(1,2).swapaxes(0,1)
+        elif x_dim == 1 and y_dim == 0: data_to_mask = arr.swapaxes(2,0)
+        elif x_dim == 0 and y_dim == 2: data_to_mask = arr.swapaxes(1,2)
+        elif x_dim == 2 and y_dim == 0: data_to_mask = arr.swapaxes(2,1).swapaxes(2,0)
+        else:
+            raise NotImplementedError
     
-        return arr * mask
+#         print data_to_mask.shape
+#         print mask.shape
+#         print data_to_mask * mask).shape
+    
+        # Mask the data:    
+        if kwds.get('returnMappedCoords', False):
+            return data_to_mask * mask, coords
+        else:
+            return data_to_mask * mask
     
     def shape(self):
         self.path = QtGui.QPainterPath()

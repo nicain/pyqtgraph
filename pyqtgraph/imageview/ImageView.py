@@ -36,9 +36,9 @@ except ImportError:
     from numpy import nanmin, nanmax
     
 
-class PlotROI(ROI):
+class PlotROI(CircleROI):
     def __init__(self, size):
-        ROI.__init__(self, pos=[0,0], size=size) #, scaleSnap=True, translateSnap=True)
+        CircleROI.__init__(self, pos=[0,0], size=size) #, scaleSnap=True, translateSnap=True)
         self.addScaleHandle([1, 1], [0, 0])
         self.addRotateHandle([0, 0], [0.5, 0.5])
 
@@ -535,17 +535,17 @@ class ImageView(QtGui.QWidget):
             return
             
         image = self.getProcessedImage()
-        if image.ndim == 2:
-            axes = (0, 1)
-        elif image.ndim == 3:
-            axes = (1, 2)
-        else:
-            return
+        axes = (self.axes['x'], self.axes['y'])
         data, coords = self.roi.getArrayRegion(image.view(np.ndarray), self.imageItem, axes, returnMappedCoords=True)
+        
+        print data.shape
+        
         if data is not None:
             while data.ndim > 1:
                 data = data.mean(axis=1)
             if image.ndim == 3:
+                print data.shape
+                print data
                 self.roiCurve.setData(y=data, x=self.tVals)
             else:
                 while coords.ndim > 2:
