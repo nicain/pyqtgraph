@@ -1072,8 +1072,9 @@ class ROI(GraphicsObject):
         
         All extra keyword arguments are passed to :func:`affineSlice <pyqtgraph.affineSlice>`.
         """
-        
+
         shape, vectors, origin = self.getAffineSliceParams(data, img, axes)
+
         if not returnMappedCoords:
             return fn.affineSlice(data, shape=shape, vectors=vectors, origin=origin, axes=axes, **kwds)
         else:
@@ -1695,40 +1696,39 @@ class EllipseROI(ROI):
         of the ROI. Regions outside the ellipse are set to 0.
         """
         
-        axes = args[2]
-        x_dim, y_dim = axes 
         result = ROI.getArrayRegion(self, *args, **kwds)
         if kwds.get('returnMappedCoords', False):
             arr, coords = result
         else:
             arr = result
+           
+        axes = args[2]
+        x_dim, y_dim = axes
             
-        print 
         if arr is None or arr.shape[0] == 0 or arr.shape[1] == 0:
             return None
         
-        print coords.shape
         w, h = arr.shape[x_dim], arr.shape[y_dim] 
+
         
         ## generate an ellipsoidal mask
         mask = np.fromfunction(lambda x,y: (((x+0.5)/(w/2.)-1)**2+ ((y+0.5)/(h/2.)-1)**2)**0.5 < 1, (w, h))
 
-        if x_dim == 0 and y_dim == 1: data_to_mask = arr.swapaxes(1,2).swapaxes(0,1)
-        elif x_dim == 1 and y_dim == 0: data_to_mask = arr.swapaxes(2,0)
-        elif x_dim == 0 and y_dim == 2: data_to_mask = arr.swapaxes(1,2)
-        elif x_dim == 2 and y_dim == 0: data_to_mask = arr.swapaxes(2,1).swapaxes(2,0)
-        else:
-            raise NotImplementedError
+        trAx = list(range(arr.ndim))
+        for x in axes:
+            trAx.remove(x)
+        tr1 = tuple(trAx) + tuple(axes)
+        arr = arr.transpose(tr1)
     
-#         print data_to_mask.shape
-#         print mask.shape
-#         print data_to_mask * mask).shape
+        # Mask out coords
+        coords[:, mask==False] = np.nan
+#         coords[1, mask==False] = np.nan
     
         # Mask the data:    
         if kwds.get('returnMappedCoords', False):
-            return data_to_mask * mask, coords
+            return arr * mask, coords
         else:
-            return data_to_mask * mask
+            return arr * mask
     
     def shape(self):
         self.path = QtGui.QPainterPath()

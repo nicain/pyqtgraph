@@ -237,16 +237,7 @@ class ImageView(QtGui.QWidget):
         
         self.image = img
         self.imageDisp = None
-        
-        if xvals is not None:
-            self.tVals = xvals
-        elif hasattr(img, 'xvals'):
-            try:
-                self.tVals = img.xvals(0)
-            except:
-                self.tVals = np.arange(img.shape[0])
-        else:
-            self.tVals = np.arange(img.shape[0])
+
         
         profiler()
         
@@ -273,6 +264,18 @@ class ImageView(QtGui.QWidget):
             
         for x in ['t', 'x', 'y', 'c']:
             self.axes[x] = self.axes.get(x, None)
+            
+            
+        if xvals is not None:
+            self.tVals = xvals
+        elif hasattr(img, 'xvals'):
+            try:
+                self.tVals = img.xvals(0)
+            except:
+                self.tVals = np.arange(img.shape[self.axes['t']])
+        else:
+            self.tVals = np.arange(img.shape[self.axes['t']])
+        print len(self.tVals)
 
         profiler()
 
@@ -502,7 +505,6 @@ class ImageView(QtGui.QWidget):
         if self.ui.roiBtn.isChecked():
             showRoiPlot = True
             self.roi.show()
-            #self.ui.roiPlot.show()
             self.ui.roiPlot.setMouseEnabled(True, True)
             self.ui.splitter.setSizes([self.height()*0.6, self.height()*0.4])
             self.roiCurve.show()
@@ -510,6 +512,7 @@ class ImageView(QtGui.QWidget):
             self.ui.roiPlot.showAxis('left')
         else:
             self.roi.hide()
+            self.roi_coord_list = None
             self.ui.roiPlot.setMouseEnabled(False, False)
             self.roiCurve.hide()
             self.ui.roiPlot.hideAxis('left')
@@ -538,14 +541,19 @@ class ImageView(QtGui.QWidget):
         axes = (self.axes['x'], self.axes['y'])
         data, coords = self.roi.getArrayRegion(image.view(np.ndarray), self.imageItem, axes, returnMappedCoords=True)
         
-        print data.shape
+        self.roi_coord_list = []
+        for xx, yy in zip(coords[0,:,:].flatten(), coords[1,:,:].flatten()):
+            if xx < 0: xx = 0
+            if yy < 0: yy = 0
+            if xx > image.shape[self.axes['x']]: xx = image.shape[self.axes['x']]
+            if yy > image.shape[self.axes['x']]: yy = image.shape[self.axes['x']]
+            if not np.isnan(xx) and not np.isnan(yy):
+                self.roi_coord_list.append((xx,yy)) 
         
         if data is not None:
             while data.ndim > 1:
                 data = data.mean(axis=1)
             if image.ndim == 3:
-                print data.shape
-                print data
                 self.roiCurve.setData(y=data, x=self.tVals)
             else:
                 while coords.ndim > 2:
@@ -588,6 +596,7 @@ class ImageView(QtGui.QWidget):
             (sind, start) = self.timeIndex(self.normRgn.lines[0])
             (eind, end) = self.timeIndex(self.normRgn.lines[1])
             #print start, end, sind, eind
+            raise Exception
             n = image[sind:eind+1].mean(axis=0)
             n.shape = (1,) + n.shape
             if div:
@@ -597,6 +606,7 @@ class ImageView(QtGui.QWidget):
                 
         if self.ui.normFrameCheck.isChecked() and image.ndim == 3:
             n = image.mean(axis=1).mean(axis=1)
+            raise Exception
             n.shape = n.shape + (1, 1)
             if div:
                 norm /= n
@@ -604,6 +614,7 @@ class ImageView(QtGui.QWidget):
                 norm -= n
             
         if self.ui.normROICheck.isChecked() and image.ndim == 3:
+            raise Exception
             n = self.normRoi.getArrayRegion(norm, self.imageItem, (1, 2)).mean(axis=1).mean(axis=1)
             n = n[:,np.newaxis,np.newaxis]
             #print start, end, sind, eind
@@ -637,10 +648,20 @@ class ImageView(QtGui.QWidget):
         if autoHistogramRange:
             self.ui.histogram.setHistogramRange(self.levelMin, self.levelMax)
         if self.axes['t'] is None:
-            self.imageItem.updateImage(image)
+            curr_slice = image
         else:
             self.ui.roiPlot.show()
-            self.imageItem.updateImage(image[self.currentIndex])
+            indx = [Ellipsis]*image.ndim
+            indx[self.axes['t']] = self.currentIndex
+            curr_slice = image[indx]
+            
+        assert self.axes['c'] is None 
+        if self.axes['x'] == 0 < self.axes['y']: 
+            self.imageItem.updateImage(curr_slice)
+        if self.axes['x'] == 1 > self.axes['y'] == 0: 
+            self.imageItem.updateImage(curr_slice.T)
+        else:
+            raise Exception
             
             
     def timeIndex(self, slider):
@@ -681,21 +702,10 @@ class ImageView(QtGui.QWidget):
 
     def export(self, fileName):
         """
-        Export data from the ImageView to a file, or to a stack of files if
-        the data is 3D. Saving an image stack will result in index numbers
-        being added to the file name. Images are saved as they would appear
-        onscreen, with levels and lookup table applied.
+        Export ROI to a file.
         """
-        img = self.getProcessedImage()
-        if self.hasTimeAxis():
-            base, ext = os.path.splitext(fileName)
-            fmt = "%%s%%0%dd%%s" % int(np.log10(img.shape[0])+1)
-            for i in range(img.shape[0]):
-                self.imageItem.setImage(img[i], autoLevels=False)
-                self.imageItem.save(fmt % (base, i, ext))
-            self.updateImage()
-        else:
-            self.imageItem.save(fileName)
+        
+        print self.roi_coord_list
             
     def exportClicked(self):
         fileName = QtGui.QFileDialog.getSaveFileName()
@@ -709,7 +719,7 @@ class ImageView(QtGui.QWidget):
         self.normAction.setCheckable(True)
         self.normAction.toggled.connect(self.normToggled)
         self.menu.addAction(self.normAction)
-        self.exportAction = QtGui.QAction("Export", self.menu)
+        self.exportAction = QtGui.QAction("Export ROI", self.menu)
         self.exportAction.triggered.connect(self.exportClicked)
         self.menu.addAction(self.exportAction)
         
